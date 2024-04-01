@@ -1,5 +1,6 @@
 import csv
-from confluent_kafka import Producer
+from confluent_kafka import Producer, SerializingProducer
+from confluent_kafka.serialization import StringSerializer
 
 my_producer_config = {
     'brokers': 'localhost:29092,localhost:29093',
@@ -10,11 +11,13 @@ my_producer_config = {
 
 
 def init_producer(config: dict) -> Producer:
-    return Producer({
+    return SerializingProducer({
         'bootstrap.servers': config['brokers'],
         'client.id': config['client.id'],
         'security.protocol': config['protocol'],
-        'acks': config['acks']
+        'acks': config['acks'],
+        'key.serializer': StringSerializer('utf-8'),
+        'value.serializer': StringSerializer('utf-8')
     })
 
 
@@ -44,7 +47,7 @@ def acked(err, msg):
 def simple_producer(producer: Producer, file_name: str, topic: str) -> bool:
     for row in read_file(file_name):
         # put roes into delivery buffer
-        producer.produce(topic, key=row[0], value=row[1], callback=acked)
+        producer.produce(topic, key=row[0], value=row[1], on_delivery=acked)
         # get a callback
         producer.poll(1)
     # waiting for delivery
@@ -52,4 +55,4 @@ def simple_producer(producer: Producer, file_name: str, topic: str) -> bool:
     return True
 
 
-# simple_producer(producer=init_producer(my_producer_config), file_name='my_test_data.csv', topic='MyTestTopic2')
+simple_producer(producer=init_producer(my_producer_config), file_name='my_test_data.csv', topic='MyTestTopic2')
