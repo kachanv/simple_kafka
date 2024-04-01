@@ -1,32 +1,55 @@
+import csv
 from confluent_kafka import Producer
-import socket
 
 my_producer_config = {
-        'brokers': 'host1:9092,host2:9092',
-        'client.id': 'my_client',
-        'protocol': 'PLAINTEXT',
-        
-       }
-
-producer = Producer(conf)
-
-producer.produce(topic, key="key", value="value")
+    'brokers': 'localhost:29092,localhost:29093',
+    'client.id': 'my_client',
+    'protocol': 'PLAINTEXT',
+    'acks': 'all'
+}
 
 
+def init_producer(config: dict) -> Producer:
+    return Producer({
+        'bootstrap.servers': config['brokers'],
+        'client.id': config['client.id'],
+        'security.protocol': config['protocol'],
+        'acks': config['acks']
+    })
+
+
+# function read file:
+# key_1;value_1
+# key_2;value_2
+# key_3;value_3
+def read_file(file_name: str) -> list:
+    with open(file_name) as f:
+        reader = csv.reader(f, delimiter=';')
+        for row in reader:
+            try:
+                yield row
+            except IndexError:
+                continue
+
+
+# callback function
 def acked(err, msg):
     if err is not None:
         print("Failed to deliver message: %s: %s" % (str(msg), str(err)))
     else:
         print("Message produced: %s" % (str(msg)))
 
-producer.produce(topic, key="key", value="value", callback=acked)
 
-# Wait up to 1 second for events. Callbacks will be invoked during
-# this method call if the message is acknowledged.
-producer.poll(1)
+# simple async producer
+def simple_producer(producer: Producer, file_name: str, topic: str) -> bool:
+    for row in read_file(file_name):
+        # put roes into delivery buffer
+        producer.produce(topic, key=row[0], value=row[1], callback=acked)
+        # get a callback
+        producer.poll(1)
+    # waiting for delivery
+    producer.flush()
+    return True
 
 
-#TODO
-# есть .csv файлы в которых с разделителем ; лежат данные: key;value
-# нужно в цикле вычитать и асинхронно отправить в kafka топик с семантикой доставки в брокер at least once
-# key и value сериализовать StringSerializer
+# simple_producer(producer=init_producer(my_producer_config), file_name='my_test_data.csv', topic='MyTestTopic2')
